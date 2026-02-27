@@ -34,6 +34,27 @@
       font-weight: 700;
       font-size: 0.95rem;
       flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-title {
+      flex: 1;
+      text-align: center;
+    }
+
+    .back-btn {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .mode-bar {
@@ -240,7 +261,11 @@
 
 <body>
 
-  <div class="header">⚡ QR Code 極速掃描器 (離線快取)</div>
+  <div class="header">
+    <button class="back-btn" onclick="goBack()">⬅️ 返回</button>
+    <span class="header-title">⚡ QR Code 極速掃描器</span>
+    <div style="width: 70px;"></div>
+  </div>
   <div class="mode-bar" id="modeBar">載入中...</div>
 
   <div class="video-wrap" id="videoWrap">
@@ -664,6 +689,25 @@
           syncPendingQueue(); // 最後一次同步
         }
       });
+
+      // ====== 返回管理頁面 ======
+      window.goBack = function () {
+        // 先同步剩餘佇列
+        if (syncQueue.length > 0) {
+          statusBar.className = 'status-bar sending';
+          statusBar.textContent = '📡 正在同步剩餘 ' + syncQueue.length + ' 筆資料...';
+          syncPendingQueue();
+          // 給一點時間讓同步完成
+          setTimeout(function () { window.close(); }, 2000);
+        } else {
+          window.close();
+        }
+        // 如果 window.close() 被瀏覽器擋住（非 script 開啟的窗口），提示使用者
+        setTimeout(function () {
+          statusBar.className = 'status-bar waiting';
+          statusBar.textContent = '請手動關閉此分頁，返回點名系統頁面';
+        }, 2500);
+      };
 
       // ====== 啟動 ======
       loadParticipantData(); // 先載入資料
