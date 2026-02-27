@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>QR Code Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Noto Sans TC', -apple-system, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.header {
+  padding: 12px 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #d97706, #b45309);
+  width: 100%;
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  background: #000;
+  flex: 1;
+}
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+canvas { display: none; }
+.scan-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.scan-frame {
+  width: 250px;
+  height: 250px;
+  border: 3px solid rgba(255,255,255,0.7);
+  border-radius: 16px;
+  position: relative;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+}
+.scan-frame::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 3px;
+  background: #fbbf24;
+  box-shadow: 0 0 12px #fbbf24;
+  animation: scanLine 2s ease-in-out infinite;
+}
+@keyframes scanLine {
+  0%, 100% { top: 0; }
+  50% { top: calc(100% - 3px); }
+}
+.status-bar {
+  width: 100%;
+  padding: 12px 20px;
+  text-align: center;
+  font-size: 0.95rem;
+  background: #1e293b;
+}
+.status-bar.success { background: #065f46; color: #6ee7b7; }
+.status-bar.error { background: #7f1d1d; color: #fca5a5; }
+.status-bar.waiting { background: #1e293b; color: #94a3b8; }
+.err-box {
+  padding: 30px 20px;
+  text-align: center;
+  max-width: 400px;
+}
+.err-box p { margin-bottom: 10px; }
+.err-box button {
+  background: #d97706;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">QR Code 即時掃描器</div>
+
+<div class="video-wrap" id="videoWrap">
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="scan-overlay">
+    <div class="scan-frame"></div>
+  </div>
+</div>
+
+<div class="status-bar waiting" id="statusBar">正在啟動相機...</div>
+
+<script>
+(function() {
+  var video = document.getElementById('video');
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var statusBar = document.getElementById('statusBar');
+  var scanning = true;
+  var lastSent = '';
+  var lastSentTime = 0;
+  var openerReady = false;
+
+  // 檢查 opener 是否存在
+  try {
+    openerReady = !!window.opener && !window.opener.closed;
+  } catch(e) {
+    openerReady = false;
+  }
+
+  // 啟動相機
+  function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showError('此瀏覽器不支援相機，請使用 Chrome 或 Safari。');
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    })
+    .then(function(stream) {
+      video.srcObject = stream;
+      video.play().then(function() {
+        statusBar.className = 'status-bar waiting';
+        statusBar.textContent = '請將 QR Code 對準掃描框';
+        requestAnimationFrame(scanFrame);
+      });
+    })
+    .catch(function(err) {
+      console.error('Camera error:', err);
+      if (err.name === 'NotAllowedError') {
+        showError('相機權限被拒絕。請在瀏覽器設定中允許此頁面使用相機，然後重新整理。');
+      } else if (err.name === 'NotFoundError') {
+        showError('找不到相機裝置。');
+      } else {
+        showError('相機啟動失敗：' + err.message);
+      }
+    });
+  }
+
+  // 掃描迴圈
+  function scanFrame() {
+    if (!scanning) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+
+      if (code && code.data) {
+        var now = Date.now();
+        // 防重複：同一個碼 3 秒內不重送
+        if (code.data !== lastSent || (now - lastSentTime) > 3000) {
+          lastSent = code.data;
+          lastSentTime = now;
+          sendResult(code.data);
+        }
+      }
+    }
+
+    requestAnimationFrame(scanFrame);
+  }
+
+  // 傳送掃描結果回主視窗
+  function sendResult(data) {
+    statusBar.className = 'status-bar success';
+    statusBar.textContent = '✅ 已掃描: ' + data;
+
+    // 方法 1: postMessage 回 opener
+    try {
+      if (openerReady && window.opener && !window.opener.closed) {
+        window.opener.postMessage({
+          type: 'qr-scan-result',
+          code: data,
+          timestamp: Date.now()
+        }, '*');
+      }
+    } catch(e) {
+      console.warn('postMessage failed:', e);
+    }
+
+    // 3 秒後恢復等待狀態
+    setTimeout(function() {
+      statusBar.className = 'status-bar waiting';
+      statusBar.textContent = '請將 QR Code 對準掃描框';
+    }, 2000);
+  }
+
+  function showError(msg) {
+    var wrap = document.getElementById('videoWrap');
+    wrap.innerHTML =
+      '<div class="err-box">' +
+        '<p style="font-size:1.2rem; font-weight:bold;">⚠️ ' + msg + '</p>' +
+        '<button onclick="location.reload()">🔄 重試</button>' +
+      '</div>';
+    statusBar.className = 'status-bar error';
+    statusBar.textContent = '相機無法使用';
+  }
+
+  // 開始
+  startCamera();
+})();
+</script>
+</body>
+</html>
