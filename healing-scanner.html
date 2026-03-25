@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📷 醫治特會 — QR 掃描報到</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans TC', -apple-system, sans-serif;
+            background: #0a0a14;
+            color: #e2e8f0;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+        .header {
+            padding: 10px 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #c8a45c, #a6843a);
+            width: 100%;
+            color: #0d0d1a;
+            font-weight: 700;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title { flex: 1; text-align: center; }
+        .back-btn {
+            background: rgba(0,0,0,0.2);
+            color: #0d0d1a;
+            border: 1px solid rgba(0,0,0,0.3);
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .mode-bar {
+            width: 100%;
+            padding: 6px 20px;
+            text-align: center;
+            font-size: 0.8rem;
+            background: #151528;
+            color: #a8a29e;
+            flex-shrink: 0;
+        }
+        .mode-bar strong { color: #c8a45c; }
+        .video-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            background: #000;
+            flex: 1;
+            overflow: hidden;
+        }
+        video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        canvas { display: none; }
+        .scan-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .scan-frame {
+            width: 220px; height: 220px;
+            border: 3px solid rgba(200,164,92,0.7);
+            border-radius: 16px;
+            position: relative;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+        }
+        .scan-frame::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 3px;
+            background: #c8a45c;
+            box-shadow: 0 0 12px #c8a45c;
+            animation: scanLine 2s ease-in-out infinite;
+        }
+        @keyframes scanLine {
+            0%, 100% { top: 0; }
+            50% { top: calc(100% - 3px); }
+        }
+        .status-bar {
+            width: 100%;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 500;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .status-bar.success { background: #065f46; color: #6ee7b7; }
+        .status-bar.error { background: #7f1d1d; color: #fca5a5; }
+        .status-bar.waiting { background: #151528; color: #a8a29e; }
+        .status-bar.loading { background: #3b2a10; color: #e2c67b; }
+        .status-bar.warn { background: #78350f; color: #fcd34d; }
+        .queue-bar {
+            width: 100%;
+            padding: 4px 20px;
+            text-align: center;
+            font-size: 0.75rem;
+            background: #151528;
+            color: #64748b;
+            flex-shrink: 0;
+        }
+        .queue-bar.has-items { background: #3b2a10; color: #c8a45c; }
+        .debug-info {
+            font-size: 0.7rem;
+            color: #57534e;
+            padding: 4px 20px;
+            background: #0a0a14;
+            width: 100%;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .recent-list {
+            width: 100%;
+            max-height: 120px;
+            overflow-y: auto;
+            padding: 0 12px;
+            flex-shrink: 0;
+            background: #0a0a14;
+        }
+        .recent-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            border-bottom: 1px solid #1a1a30;
+        }
+        .recent-item .name { color: #6ee7b7; font-weight: 600; }
+        .recent-item .time { color: #64748b; }
+        .sync-done { color: #22c55e; }
+        .sync-pending { color: #c8a45c; }
+        .err-box { padding: 30px 20px; text-align: center; max-width: 400px; }
+        .err-box p { margin-bottom: 10px; }
+        .err-box button {
+            background: linear-gradient(135deg, #e2c67b, #c8a45c); color: #0d0d1a; border: none;
+            padding: 12px 24px; border-radius: 10px;
+            font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="window.goBack()">← 返回</button>
+        <div class="header-title">✝ 醫治特會 — 報到掃描器</div>
+        <div style="width:60px;"></div>
+    </div>
+
+    <div class="mode-bar" id="modeBar">載入中...</div>
+
+    <div class="video-wrap" id="videoWrap">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div class="scan-overlay">
+            <div class="scan-frame"></div>
+        </div>
+    </div>
+
+    <div class="status-bar waiting" id="statusBar">正在載入報名資料...</div>
+    <div class="queue-bar" id="queueBar">待同步: 0 筆</div>
+    <div class="recent-list" id="recentList"></div>
+    <div class="debug-info" id="debugInfo"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
+    <script>
+        (function () {
+            var video = document.getElementById('video');
+            var canvas = document.getElementById('canvas');
+            var ctx = canvas.getContext('2d', { willReadFrequently: true });
+            var statusBar = document.getElementById('statusBar');
+            var modeBar = document.getElementById('modeBar');
+            var queueBarEl = document.getElementById('queueBar');
+            var recentListEl = document.getElementById('recentList');
+            var debugInfo = document.getElementById('debugInfo');
+
+            var scanning = true;
+            var lastSent = '';
+            var lastSentTime = 0;
+            var scanCount = 0;
+
+            // ====== 離線快取 ======
+            var participantMap = {};
+            var dataLoaded = false;
+            var syncQueue = [];
+            var isSyncing = false;
+            var recentScans = [];
+            var SYNC_INTERVAL = 5000;
+            var syncTimer = null;
+
+            // ====== 手機優化 ======
+            var SCAN_INTERVAL = 150;
+            var MAX_SCAN_WIDTH = 480;
+            var COOLDOWN_MS = 3000;
+
+            // ====== URL 參數 ======
+            function getParam(name) {
+                var match = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+                return match ? decodeURIComponent(match[1]) : '';
+            }
+
+            var gasUrl = getParam('gasUrl');
+            var pin = getParam('pin');
+
+            if (gasUrl && pin) {
+                modeBar.innerHTML = '模式: <strong>入場報到</strong> | 已連線';
+            } else {
+                modeBar.innerHTML = '<span style="color:#f87171;">缺少參數，請從管理員頁面開啟</span>';
+            }
+
+            // ====== 音效 ======
+            function playBeep() {
+                try {
+                    var ac = new (window.AudioContext || window.webkitAudioContext)();
+                    var osc = ac.createOscillator();
+                    var gain = ac.createGain();
+                    osc.connect(gain); gain.connect(ac.destination);
+                    osc.type = 'sine'; osc.frequency.value = 880; gain.gain.value = 0.3;
+                    osc.start(); osc.stop(ac.currentTime + 0.15);
+                } catch (e) {}
+            }
+            function playErrorBeep() {
+                try {
+                    var ac = new (window.AudioContext || window.webkitAudioContext)();
+                    var osc = ac.createOscillator();
+                    var gain = ac.createGain();
+                    osc.connect(gain); gain.connect(ac.destination);
+                    osc.type = 'square'; osc.frequency.value = 300; gain.gain.value = 0.2;
+                    osc.start(); osc.stop(ac.currentTime + 0.3);
+                } catch (e) {}
+            }
+
+            // ====== 1. 載入報名資料 ======
+            function loadParticipantData() {
+                if (!gasUrl || !pin) {
+                    statusBar.className = 'status-bar error';
+                    statusBar.textContent = '缺少 GAS URL 或密碼參數';
+                    return;
+                }
+
+                statusBar.className = 'status-bar loading';
+                statusBar.textContent = '正在載入報名資料...';
+
+                var apiUrl = gasUrl + '?action=getScannerData&pin=' + encodeURIComponent(pin);
+
+                fetch(apiUrl, { method: 'GET', redirect: 'follow' })
+                    .then(function (resp) { return resp.text(); })
+                    .then(function (text) {
+                        try {
+                            var result = JSON.parse(text);
+                            if (result.success && result.data) {
+                                participantMap = {};
+                                var count = 0;
+                                result.data.forEach(function (p) {
+                                    participantMap[p.code] = p;
+                                    count++;
+                                });
+
+                                dataLoaded = true;
+                                statusBar.className = 'status-bar waiting';
+                                statusBar.textContent = '已載入 ' + count + ' 筆資料，請掃描 QR Code';
+                                debugInfo.textContent = '資料庫: ' + count + ' 筆';
+                                startSyncTimer();
+                            } else {
+                                statusBar.className = 'status-bar error';
+                                statusBar.textContent = (result.message || '載入失敗');
+                            }
+                        } catch (e) {
+                            statusBar.className = 'status-bar error';
+                            statusBar.textContent = '資料解析失敗';
+                        }
+                    })
+                    .catch(function (err) {
+                        statusBar.className = 'status-bar error';
+                        statusBar.textContent = '網路錯誤: ' + err.message;
+                    });
+            }
+
+            // ====== 繳費判斷 ======
+            function isPaid(status) {
+                if (!status) return false;
+                return status.indexOf('繳費') >= 0 && status.indexOf('回報') < 0;
+            }
+
+            // ====== 2. 掃描處理（本地即時驗證）======
+            function handleScanResult(scannedCode) {
+                if (!dataLoaded) {
+                    statusBar.className = 'status-bar error';
+                    statusBar.textContent = '資料庫尚未載入完成';
+                    return;
+                }
+
+                var now = Date.now();
+                if (scannedCode === lastSent && (now - lastSentTime) < COOLDOWN_MS) return;
+                lastSent = scannedCode;
+                lastSentTime = now;
+
+                var person = participantMap[scannedCode];
+
+                if (!person) {
+                    playErrorBeep();
+                    statusBar.className = 'status-bar error';
+                    statusBar.textContent = '無效入場碼: ' + scannedCode;
+                    resetStatusLater(2500);
+                    return;
+                }
+
+                // 繳費檢查
+                if (!isPaid(person.status)) {
+                    playErrorBeep();
+                    statusBar.className = 'status-bar warn';
+                    statusBar.textContent = person.name + ' 尚未繳費，無法入場！';
+                    resetStatusLater(3000);
+                    return;
+                }
+
+                // 已報到重複掃描提示
+                if (person.status === '已報到') {
+                    playBeep();
+                    statusBar.className = 'status-bar warn';
+                    statusBar.textContent = person.name + '（' + (person.area || '') + '）已報到過';
+                    resetStatusLater(2500);
+                    return;
+                }
+
+                // 成功
+                playBeep();
+                if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+                statusBar.className = 'status-bar success';
+                statusBar.textContent = person.name + '（' + (person.area || '') + '）報到成功！';
+
+                // 本地即時更新狀態
+                person.status = '已報到';
+
+                syncQueue.push({
+                    code: person.code,
+                    name: person.name,
+                    row: person.row,
+                    timestamp: now
+                });
+
+                addRecentScan(person.name, false);
+                updateQueueBar();
+                resetStatusLater(2000);
+
+                // 通知 opener
+                try {
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage({
+                            type: 'qr-scan-result',
+                            code: scannedCode,
+                            name: person.name,
+                            timestamp: now
+                        }, '*');
+                    }
+                } catch (e) {}
+            }
+
+            // ====== 3. 背景批次同步 ======
+            function startSyncTimer() {
+                if (syncTimer) clearInterval(syncTimer);
+                syncTimer = setInterval(syncPendingQueue, SYNC_INTERVAL);
+            }
+
+            function syncPendingQueue() {
+                if (isSyncing || syncQueue.length === 0 || !gasUrl || !pin) return;
+                isSyncing = true;
+                var toSync = syncQueue.splice(0, syncQueue.length);
+                updateQueueBar();
+
+                var apiUrl = gasUrl + '?action=batchScan' +
+                    '&pin=' + encodeURIComponent(pin) +
+                    '&records=' + encodeURIComponent(JSON.stringify(toSync));
+
+                fetch(apiUrl, { method: 'GET', redirect: 'follow' })
+                    .then(function (resp) { return resp.text(); })
+                    .then(function (text) {
+                        isSyncing = false;
+                        try {
+                            var result = JSON.parse(text);
+                            if (result.success) {
+                                toSync.forEach(function (r) { markSynced(r.name); });
+                                debugInfo.textContent = '已同步 ' + (result.processed || toSync.length) + ' 筆 | 資料庫: ' + Object.keys(participantMap).length + ' 筆';
+                            } else {
+                                syncQueue = toSync.concat(syncQueue);
+                                updateQueueBar();
+                                debugInfo.textContent = '同步失敗: ' + (result.message || '未知');
+                            }
+                        } catch (e) {
+                            toSync.forEach(function (r) { markSynced(r.name); });
+                            debugInfo.textContent = '已送出 ' + toSync.length + ' 筆';
+                        }
+                    })
+                    .catch(function (err) {
+                        isSyncing = false;
+                        syncQueue = toSync.concat(syncQueue);
+                        updateQueueBar();
+                        debugInfo.textContent = '網路錯誤，待重試: ' + syncQueue.length + ' 筆';
+                    });
+            }
+
+            // ====== UI 輔助 ======
+            function updateQueueBar() {
+                var count = syncQueue.length;
+                if (count > 0) {
+                    queueBarEl.className = 'queue-bar has-items';
+                    queueBarEl.textContent = '待同步: ' + count + ' 筆（每 ' + (SYNC_INTERVAL / 1000) + ' 秒自動上傳）';
+                } else {
+                    queueBarEl.className = 'queue-bar';
+                    queueBarEl.textContent = '所有紀錄已同步';
+                }
+            }
+
+            function addRecentScan(name, synced) {
+                recentScans.unshift({
+                    name: name,
+                    time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    synced: synced
+                });
+                if (recentScans.length > 20) recentScans.pop();
+                renderRecentList();
+            }
+
+            function markSynced(name) {
+                for (var i = 0; i < recentScans.length; i++) {
+                    if (recentScans[i].name === name && !recentScans[i].synced) {
+                        recentScans[i].synced = true;
+                        break;
+                    }
+                }
+                renderRecentList();
+            }
+
+            function renderRecentList() {
+                var html = '';
+                recentScans.forEach(function (r) {
+                    var syncIcon = r.synced
+                        ? '<span class="sync-done" style="margin-left:5px;">✓</span>'
+                        : '<span class="sync-pending" style="margin-left:5px;">⏳</span>';
+                    html += '<div class="recent-item"><span class="name">' + r.name + '</span><span class="time">' + r.time + syncIcon + '</span></div>';
+                });
+                recentListEl.innerHTML = html;
+            }
+
+            function resetStatusLater(ms) {
+                setTimeout(function () {
+                    if (dataLoaded) {
+                        statusBar.className = 'status-bar waiting';
+                        statusBar.textContent = '請將 QR Code 對準掃描框';
+                    }
+                }, ms || 2500);
+            }
+
+            function showError(msg) {
+                document.getElementById('videoWrap').innerHTML =
+                    '<div class="err-box">' +
+                    '<p style="font-size:1.2rem; font-weight:bold;">' + msg + '</p>' +
+                    '<button onclick="location.reload()">重試</button>' +
+                    '</div>';
+                statusBar.className = 'status-bar error';
+                statusBar.textContent = '相機無法使用';
+            }
+
+            // ====== 相機 & jsQR ======
+            function startCamera() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    showError('此瀏覽器不支援相機，請使用 Chrome 或 Safari。');
+                    return;
+                }
+
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        focusMode: { ideal: 'continuous' },
+                        frameRate: { ideal: 15, max: 30 }
+                    },
+                    audio: false
+                })
+                .then(function (stream) {
+                    video.srcObject = stream;
+                    try {
+                        var track = stream.getVideoTracks()[0];
+                        var caps = track.getCapabilities ? track.getCapabilities() : {};
+                        if (caps.focusMode && caps.focusMode.indexOf('continuous') > -1) {
+                            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                        }
+                    } catch (e) {}
+
+                    video.play().then(function () {
+                        debugInfo.textContent = '相機: ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
+                        setInterval(scanFrame, SCAN_INTERVAL);
+                    });
+                })
+                .catch(function (err) {
+                    if (err.name === 'OverconstrainedError') {
+                        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                            .then(function (stream) {
+                                video.srcObject = stream;
+                                video.play().then(function () { setInterval(scanFrame, SCAN_INTERVAL); });
+                            })
+                            .catch(function (e2) { showError('相機啟動失敗：' + e2.message); });
+                    } else if (err.name === 'NotAllowedError') {
+                        showError('相機權限被拒絕。請允許此頁面使用相機，然後重新整理。');
+                    } else {
+                        showError('相機啟動失敗：' + err.message);
+                    }
+                });
+            }
+
+            function scanFrame() {
+                if (!scanning) return;
+                if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+                var vw = video.videoWidth, vh = video.videoHeight;
+                if (!vw || !vh) return;
+
+                var scale = Math.min(1, MAX_SCAN_WIDTH / vw);
+                var sw = Math.floor(vw * scale);
+                var sh = Math.floor(vh * scale);
+
+                canvas.width = sw;
+                canvas.height = sh;
+                ctx.drawImage(video, 0, 0, sw, sh);
+
+                var imageData;
+                try { imageData = ctx.getImageData(0, 0, sw, sh); } catch (e) { return; }
+
+                var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+                scanCount++;
+
+                if (code && code.data) {
+                    handleScanResult(code.data);
+                }
+
+                if (scanCount % 20 === 0) {
+                    debugInfo.textContent = '處理: ' + sw + 'x' + sh + ' | 已掃 ' + scanCount + ' 幀 | 佇列: ' + syncQueue.length;
+                }
+            }
+
+            // ====== 離開頁面前同步 ======
+            window.addEventListener('beforeunload', function () {
+                if (syncQueue.length > 0) syncPendingQueue();
+            });
+
+            // ====== 返回 ======
+            window.goBack = function () {
+                if (syncQueue.length > 0) {
+                    statusBar.className = 'status-bar loading';
+                    statusBar.textContent = '正在同步剩餘 ' + syncQueue.length + ' 筆資料...';
+                    syncPendingQueue();
+                    setTimeout(function () { window.close(); }, 2000);
+                } else {
+                    window.close();
+                }
+                setTimeout(function () {
+                    statusBar.className = 'status-bar waiting';
+                    statusBar.textContent = '請手動關閉此分頁，返回管理員頁面';
+                }, 2500);
+            };
+
+            // ====== 啟動 ======
+            loadParticipantData();
+            startCamera();
+        })();
+    </script>
+</body>
+</html>
