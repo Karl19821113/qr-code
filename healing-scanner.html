@@ -181,6 +181,7 @@
             var video = document.getElementById('video');
             var canvas = document.getElementById('canvas');
             var ctx = canvas.getContext('2d', { willReadFrequently: true });
+            var lastDetectTime = 0;
             var statusBar = document.getElementById('statusBar');
             var modeBar = document.getElementById('modeBar');
             var queueBarEl = document.getElementById('queueBar');
@@ -494,27 +495,20 @@
                     return;
                 }
 
+                // 停止舊串流
                 if (currentStream) {
                     currentStream.getTracks().forEach(function(track) { track.stop(); });
+                    currentStream = null;
                 }
-                video.pause();
-                video.srcObject = null;
                 if (scanIntervalId) {
                     clearInterval(scanIntervalId);
                     scanIntervalId = null;
                 }
 
-                navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: currentFacingMode,
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        focusMode: { ideal: 'continuous' },
-                        frameRate: { ideal: 15, max: 30 }
-                    },
-                    audio: false
-                })
-                .then(function (stream) {
+                // 重置 canvas context（防止跨串流後 getImageData 異常）
+                ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                function onStreamReady(stream) {
                     currentStream = stream;
                     video.srcObject = stream;
                     try {
@@ -527,40 +521,61 @@
                         }
                     } catch (e) {}
 
-                    video.play().then(function () {
-                        var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
-                        debugInfo.textContent = '相機 (' + fMode + '): ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
-                        scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL);
-                        finishCameraStart();
-                    }).catch(function(e) {
-                         debugInfo.textContent = '相機播放失敗: ' + e.message;
-                         finishCameraStart();
-                    });
+                    video.onloadedmetadata = function() {
+                        video.play().then(function () {
+                            var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
+                            debugInfo.textContent = '相機 (' + fMode + '): ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
+                            // 延遲 300ms 讓影片幀穩定後再開始掃描
+                            setTimeout(function() {
+                                scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL);
+                                finishCameraStart();
+                            }, 300);
+                        }).catch(function(e) {
+                            debugInfo.textContent = '相機播放失敗: ' + e.message;
+                            finishCameraStart();
+                        });
+                    };
+                }
+
+                // 第一次用 ideal，切換時用 exact 強制指定鏡頭
+                var facingConstraint = isCameraStarting
+                    ? { exact: currentFacingMode }
+                    : { ideal: currentFacingMode };
+
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingConstraint,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 15, max: 30 }
+                    },
+                    audio: false
                 })
+                .then(onStreamReady)
                 .catch(function (err) {
-                    if (err.name === 'OverconstrainedError') {
-                        navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false })
-                            .then(function (stream) {
-                                currentStream = stream;
-                                video.srcObject = stream;
-                                video.play().then(function () { 
-                                    var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
-                                    debugInfo.textContent = '相機 (' + fMode + ')(備用): ' + video.videoWidth + 'x' + video.videoHeight;
-                                    scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL); 
-                                    finishCameraStart();
-                                }).catch(function(e) { 
-                                    debugInfo.textContent = '相機播放失敗(備用): ' + e.message;
-                                    finishCameraStart(); 
-                                });
-                            })
-                            .catch(function (e2) { showError('相機啟動失敗：' + e2.message); finishCameraStart(); });
-                    } else if (err.name === 'NotAllowedError') {
-                        showError('相機權限被拒絕。請允許此頁面使用相機，然後重新整理。');
-                        finishCameraStart();
-                    } else {
-                        showError('相機啟動失敗：' + err.message);
-                        finishCameraStart();
-                    }
+                    // 降級：不用 exact，改用 ideal
+                    navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: currentFacingMode },
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        },
+                        audio: false
+                    })
+                    .then(onStreamReady)
+                    .catch(function (err2) {
+                        // 最終降級：不指定鏡頭
+                        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                            .then(onStreamReady)
+                            .catch(function (err3) {
+                                if (err3.name === 'NotAllowedError') {
+                                    showError('相機權限被拒絕。請允許此頁面使用相機，然後重新整理。');
+                                } else {
+                                    showError('相機啟動失敗：' + err3.message);
+                                }
+                                finishCameraStart();
+                            });
+                    });
                 });
             }
 
@@ -593,17 +608,38 @@
                 ctx.drawImage(video, 0, 0, sw, sh);
 
                 var imageData;
-                try { imageData = ctx.getImageData(0, 0, sw, sh); } catch (e) { return; }
+                try {
+                    imageData = ctx.getImageData(0, 0, sw, sh);
+                } catch (e) {
+                    debugInfo.textContent = 'getImageData 錯誤: ' + e.message;
+                    return;
+                }
+
+                // 檢查影像是否為全黑（表示串流尚未產生有效畫面）
+                if (scanCount < 5) {
+                    var sum = 0;
+                    for (var px = 0; px < Math.min(imageData.data.length, 400); px += 4) {
+                        sum += imageData.data[px] + imageData.data[px+1] + imageData.data[px+2];
+                    }
+                    if (sum === 0) {
+                        debugInfo.textContent = '等待影像就緒... (幀 ' + scanCount + ')';
+                        scanCount++;
+                        return;
+                    }
+                }
 
                 var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
                 scanCount++;
 
                 if (code && code.data) {
+                    lastDetectTime = Date.now();
                     handleScanResult(code.data);
                 }
 
                 if (scanCount % 20 === 0) {
-                    debugInfo.textContent = '處理: ' + sw + 'x' + sh + ' | 已掃 ' + scanCount + ' 幀 | 佇列: ' + syncQueue.length;
+                    var fMode = currentFacingMode === 'environment' ? '後' : '前';
+                    var lastD = lastDetectTime ? ((Date.now() - lastDetectTime) / 1000).toFixed(0) + 's前' : '無';
+                    debugInfo.textContent = fMode + ' ' + sw + 'x' + sh + ' | 幀:' + scanCount + ' | 偵測:' + lastD + ' | 佇列:' + syncQueue.length;
                 }
             }
 
