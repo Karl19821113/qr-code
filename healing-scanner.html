@@ -196,6 +196,7 @@
             var currentFacingMode = 'environment';
             var currentStream = null;
             var scanIntervalId = null;
+            var isCameraStarting = false;
 
             // ====== 離線快取 ======
             var participantMap = {};
@@ -480,17 +481,27 @@
             }
 
             // ====== 相機 & jsQR ======
+            function finishCameraStart() {
+                isCameraStarting = false;
+                var btns = document.querySelectorAll('.header-btn');
+                if (btns.length > 1) btns[1].textContent = '🔄 鏡頭';
+            }
+
             function startCamera() {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     showError('此瀏覽器不支援相機，請使用 Chrome 或 Safari。');
+                    isCameraStarting = false;
                     return;
                 }
 
                 if (currentStream) {
                     currentStream.getTracks().forEach(function(track) { track.stop(); });
                 }
+                video.pause();
+                video.srcObject = null;
                 if (scanIntervalId) {
                     clearInterval(scanIntervalId);
+                    scanIntervalId = null;
                 }
 
                 navigator.mediaDevices.getUserMedia({
@@ -508,9 +519,11 @@
                     video.srcObject = stream;
                     try {
                         var track = stream.getVideoTracks()[0];
-                        var caps = track.getCapabilities ? track.getCapabilities() : {};
-                        if (caps.focusMode && caps.focusMode.indexOf('continuous') > -1) {
-                            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                        if (track.getCapabilities) {
+                            var caps = track.getCapabilities();
+                            if (caps.focusMode && caps.focusMode.indexOf('continuous') > -1) {
+                                track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                            }
                         }
                     } catch (e) {}
 
@@ -518,6 +531,10 @@
                         var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
                         debugInfo.textContent = '相機 (' + fMode + '): ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
                         scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL);
+                        finishCameraStart();
+                    }).catch(function(e) {
+                         debugInfo.textContent = '相機播放失敗: ' + e.message;
+                         finishCameraStart();
                     });
                 })
                 .catch(function (err) {
@@ -526,19 +543,37 @@
                             .then(function (stream) {
                                 currentStream = stream;
                                 video.srcObject = stream;
-                                video.play().then(function () { scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL); });
+                                video.play().then(function () { 
+                                    var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
+                                    debugInfo.textContent = '相機 (' + fMode + ')(備用): ' + video.videoWidth + 'x' + video.videoHeight;
+                                    scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL); 
+                                    finishCameraStart();
+                                }).catch(function(e) { 
+                                    debugInfo.textContent = '相機播放失敗(備用): ' + e.message;
+                                    finishCameraStart(); 
+                                });
                             })
-                            .catch(function (e2) { showError('相機啟動失敗：' + e2.message); });
+                            .catch(function (e2) { showError('相機啟動失敗：' + e2.message); finishCameraStart(); });
                     } else if (err.name === 'NotAllowedError') {
                         showError('相機權限被拒絕。請允許此頁面使用相機，然後重新整理。');
+                        finishCameraStart();
                     } else {
                         showError('相機啟動失敗：' + err.message);
+                        finishCameraStart();
                     }
                 });
             }
 
             window.toggleCamera = function() {
+                if (isCameraStarting) return;
+                isCameraStarting = true;
+                
+                var btns = document.querySelectorAll('.header-btn');
+                if (btns.length > 1) btns[1].textContent = '切換中...';
+                
                 currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+                video.style.transform = currentFacingMode === 'user' ? 'scaleX(-1)' : 'none';
+                
                 startCamera();
             };
 
