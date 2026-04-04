@@ -31,11 +31,11 @@
             align-items: center;
         }
         .header-title { flex: 1; text-align: center; }
-        .back-btn {
+        .header-btn {
             background: rgba(0,0,0,0.2);
             color: #0d0d1a;
             border: 1px solid rgba(0,0,0,0.3);
-            padding: 6px 14px;
+            padding: 6px 12px;
             border-radius: 8px;
             font-size: 0.85rem;
             font-weight: 600;
@@ -154,9 +154,9 @@
 </head>
 <body>
     <div class="header">
-        <button class="back-btn" onclick="window.goBack()">← 返回</button>
-        <div class="header-title">✝ 醫治特會 — 報到掃描器</div>
-        <div style="width:60px;"></div>
+        <button class="header-btn" onclick="window.goBack()">← 返回</button>
+        <div class="header-title">✝ 報到掃描</div>
+        <button class="header-btn" onclick="window.toggleCamera()">🔄 鏡頭</button>
     </div>
 
     <div class="mode-bar" id="modeBar">載入中...</div>
@@ -191,6 +191,11 @@
             var lastSent = '';
             var lastSentTime = 0;
             var scanCount = 0;
+
+            // ====== 鏡頭切換 ======
+            var currentFacingMode = 'environment';
+            var currentStream = null;
+            var scanIntervalId = null;
 
             // ====== 離線快取 ======
             var participantMap = {};
@@ -481,9 +486,16 @@
                     return;
                 }
 
+                if (currentStream) {
+                    currentStream.getTracks().forEach(function(track) { track.stop(); });
+                }
+                if (scanIntervalId) {
+                    clearInterval(scanIntervalId);
+                }
+
                 navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: 'environment',
+                        facingMode: currentFacingMode,
                         width: { ideal: 640 },
                         height: { ideal: 480 },
                         focusMode: { ideal: 'continuous' },
@@ -492,6 +504,7 @@
                     audio: false
                 })
                 .then(function (stream) {
+                    currentStream = stream;
                     video.srcObject = stream;
                     try {
                         var track = stream.getVideoTracks()[0];
@@ -502,16 +515,18 @@
                     } catch (e) {}
 
                     video.play().then(function () {
-                        debugInfo.textContent = '相機: ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
-                        setInterval(scanFrame, SCAN_INTERVAL);
+                        var fMode = currentFacingMode === 'environment' ? '後置' : '前置';
+                        debugInfo.textContent = '相機 (' + fMode + '): ' + video.videoWidth + 'x' + video.videoHeight + ' | 處理: ' + MAX_SCAN_WIDTH + 'px';
+                        scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL);
                     });
                 })
                 .catch(function (err) {
                     if (err.name === 'OverconstrainedError') {
-                        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                        navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false })
                             .then(function (stream) {
+                                currentStream = stream;
                                 video.srcObject = stream;
-                                video.play().then(function () { setInterval(scanFrame, SCAN_INTERVAL); });
+                                video.play().then(function () { scanIntervalId = setInterval(scanFrame, SCAN_INTERVAL); });
                             })
                             .catch(function (e2) { showError('相機啟動失敗：' + e2.message); });
                     } else if (err.name === 'NotAllowedError') {
@@ -521,6 +536,11 @@
                     }
                 });
             }
+
+            window.toggleCamera = function() {
+                currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+                startCamera();
+            };
 
             function scanFrame() {
                 if (!scanning) return;
