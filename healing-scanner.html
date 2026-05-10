@@ -299,7 +299,7 @@
             // ====== 繳費判斷 ======
             function isPaid(status) {
                 if (!status) return false;
-                return status.indexOf('繳費') >= 0 && status.indexOf('回報') < 0;
+                return (status.indexOf('繳費') >= 0 && status.indexOf('回報') < 0) || status === '已報到';
             }
 
             // ====== 2. 掃描處理（本地即時驗證）======
@@ -334,14 +334,7 @@
                     return;
                 }
 
-                // 已報到重複掃描提示
-                if (person.status === '已報到') {
-                    playBeep();
-                    statusBar.className = 'status-bar warn';
-                    statusBar.textContent = person.name + '（' + (person.area || '') + '）已報到過';
-                    resetStatusLater(2500);
-                    return;
-                }
+
 
                 // 成功
                 playBeep();
