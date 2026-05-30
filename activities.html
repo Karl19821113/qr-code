@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>桃園恩寵靈糧堂課程＆活動報名</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root { --gold: #c8a45c; --gold-light: #e2c67b; --gold-dark: #a6843a; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Manrope', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, #0a0a14 0%, #0f0f1e 30%, #151528 70%, #1a1a30 100%);
+      min-height: 100vh; color: #f0e6d0; line-height: 1.6;
+    }
+    .container { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
+    .header { text-align: center; padding: 26px 0 18px; }
+    .header h1 {
+      font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 700; letter-spacing: 1px;
+      background: linear-gradient(180deg, #f0e6d0, #c8a45c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header p { color: #c8b89a; font-size: 0.85rem; margin-top: 6px; }
+    .cat { margin-bottom: 26px; }
+    .cat-title {
+      display: flex; align-items: center; gap: 8px; font-family: 'Noto Serif TC', serif;
+      font-size: 1.15rem; font-weight: 700; color: #e2c67b; margin-bottom: 12px;
+      padding-bottom: 8px; border-bottom: 1px solid rgba(200,164,92,0.25);
+    }
+    .act-card {
+      display: block; text-decoration: none; background: #1a1a30; border: 1px solid rgba(200,164,92,0.18);
+      border-radius: 14px; padding: 15px 18px; margin-bottom: 10px; transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .act-card:hover { border-color: var(--gold); transform: translateY(-1px); }
+    .act-card-closed { opacity: 0.6; cursor: default; }
+    .act-card-closed:hover { border-color: rgba(200,164,92,0.18); transform: none; }
+    .act-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .act-name { font-size: 1.05rem; font-weight: 700; color: #f0e6d0; }
+    .act-meta { font-size: 0.78rem; color: #c8b89a; margin-top: 4px; }
+    .act-go {
+      flex: 0 0 auto; color: #0d0d1a; font-weight: 700; font-size: 0.85rem;
+      background: linear-gradient(135deg, var(--gold-light), var(--gold)); padding: 7px 14px; border-radius: 20px;
+    }
+    .act-go-closed { background: rgba(200,164,92,0.15); color: #c8b89a; white-space: nowrap; }
+    .empty { color: #8a8071; font-size: 0.85rem; padding: 6px 2px; }
+    .loading { text-align: center; color: #c8b89a; font-size: 0.9rem; padding: 30px 0; }
+    .footer { text-align: center; color: rgba(200,164,92,0.35); font-size: 0.78rem; padding-top: 16px; }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>桃園恩寵靈糧堂課程＆活動報名</h1>
+      <p>請選擇您要報名的課程或活動</p>
+    </header>
+    <div id="catContainer"><div class="loading">載入中…</div></div>
+    <footer class="footer"><p>桃園恩寵靈糧堂 © 2026</p></footer>
+  </div>
+
+  <script>
+    // ===================== 設定（部署前請確認）=====================
+    // GAS Web App 的 /exec 網址（用來 fetch 活動清單 + 組報名連結）
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbw20US19T3_iTqY764kMTRvW1-jDYhRD8Z3JFCyscK0ZzfiFFwg-QtOwLafwHZPGZOU/exec';
+    var LIFF_ID = '2010238846-3fv6sKDm';
+    // =============================================================
+
+    var USER_ID = '';
+    var DATA = { activities: [], categories: ['門訓課程', '特會活動', '專題講座'] };
+    var catIcons = { '門訓課程': '📚', '特會活動': '🔥', '專題講座': '🎤' };
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
+    }
+
+    function render() {
+      var cats = (DATA.categories && DATA.categories.length) ? DATA.categories : ['門訓課程', '特會活動', '專題講座'];
+      var html = '';
+      cats.forEach(function (cat) {
+        var items = (DATA.activities || []).filter(function (a) { return a.category === cat; });
+        html += '<div class="cat"><div class="cat-title">' + (catIcons[cat] || '📌') + ' ' + esc(cat) + '</div>';
+        if (!items.length) {
+          html += '<div class="empty">目前無相關活動</div>';
+        } else {
+          items.forEach(function (a) {
+            var inner = '<div class="act-row">'
+              + '<div><div class="act-name">' + esc(a.name) + '</div>'
+              + (a.deadline ? '<div class="act-meta">📅 報名截止：' + esc(a.deadline) + '</div>' : '')
+              + '</div>'
+              + (a.open ? '<span class="act-go">報名 ›</span>' : '<span class="act-go act-go-closed">🔒 尚未開放</span>')
+              + '</div>';
+            // 用乾淨的 GAS_URL 自組連結（避開 /a/網域/ 與快取殘留），並帶上 uid 讓報名表單抓 LINE 身分
+            var href = GAS_URL + '?event=' + encodeURIComponent(a.id) + (USER_ID ? ('&uid=' + encodeURIComponent(USER_ID)) : '');
+            html += a.open
+              ? ('<a class="act-card" href="' + esc(href) + '">' + inner + '</a>')
+              : ('<div class="act-card act-card-closed">' + inner + '</div>');
+          });
+        }
+        html += '</div>';
+      });
+      document.getElementById('catContainer').innerHTML = html;
+    }
+
+    function loadActivities() {
+      fetch(GAS_URL + '?action=getActivitiesLanding', { method: 'GET', redirect: 'follow' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d) DATA = d; render(); })
+        .catch(function () {
+          document.getElementById('catContainer').innerHTML =
+            '<div class="loading" style="color:#ef4444;">活動載入失敗，請稍後再試</div>';
+        });
+    }
+
+    function start() {
+      if (typeof liff === 'undefined') { loadActivities(); return; }
+      liff.init({ liffId: LIFF_ID }).then(function () {
+        if (liff.isLoggedIn()) {
+          liff.getProfile()
+            .then(function (p) { USER_ID = p.userId || ''; })
+            .catch(function () {})
+            .then(loadActivities);
+        } else {
+          // 外部瀏覽器未登入 → 導去 LINE 登入以取得身分（在 LINE 內開啟不會走到這）
+          liff.login();
+        }
+      }).catch(function () {
+        loadActivities();  // LIFF 失敗也照常顯示活動（只是抓不到 uid）
+      });
+    }
+
+    start();
+  </script>
+</body>
+
+</html>
