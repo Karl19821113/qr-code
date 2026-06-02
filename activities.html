@@ -30,8 +30,8 @@
 
     .header { text-align: center; padding: 16px 0 22px; position: relative; z-index: 1; }
     .header h1 {
-      font-size: 1.55rem; font-weight: 900; letter-spacing: 1px; color: #5a3e22;
-      text-shadow: 0 2px 0 #fff, 0 3px 7px rgba(150,100,50,0.25);
+      font-size: clamp(1.05rem, 4.8vw, 1.5rem); font-weight: 900; letter-spacing: 0.5px; color: #5a3e22;
+      text-shadow: 0 2px 0 #fff, 0 3px 7px rgba(150,100,50,0.25); word-break: keep-all;
     }
     .header p { color: var(--brown-soft); font-size: 0.86rem; margin-top: 8px; font-weight: 500; }
 
@@ -96,8 +96,8 @@
     // =============================================================
 
     var USER_ID = '';
-    var DATA = { activities: [], categories: ['門訓課程', '特會活動', '專題講座'] };
-    var catIcons = { '門訓課程': '📚', '特會活動': '🔥', '專題講座': '🎤' };
+    var DATA = { activities: [], categories: ['門訓課程', '君王之子', '特會活動', '專題講座'] };
+    var catIcons = { '門訓課程': '📚', '君王之子': '👑', '特會活動': '🔥', '專題講座': '🎤' };
 
     function esc(s) {
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -106,7 +106,7 @@
     }
 
     function render() {
-      var cats = (DATA.categories && DATA.categories.length) ? DATA.categories : ['門訓課程', '特會活動', '專題講座'];
+      var cats = (DATA.categories && DATA.categories.length) ? DATA.categories : ['門訓課程', '君王之子', '特會活動', '專題講座'];
       var html = '';
       cats.forEach(function (cat) {
         var items = (DATA.activities || []).filter(function (a) { return a.category === cat; });
