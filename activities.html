@@ -7,48 +7,74 @@
   <title>桃園恩寵靈糧堂課程＆活動報名</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet">
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    :root { --gold: #c8a45c; --gold-light: #e2c67b; --gold-dark: #a6843a; }
+    :root {
+      --card: #fffaf0; --edge: #dcb784; --edge-dark: #c79b60;
+      --brown: #5b4129; --brown-soft: #8a6f50;
+      --shadow: rgba(140, 95, 50, 0.18);
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Manrope', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: linear-gradient(180deg, #0a0a14 0%, #0f0f1e 30%, #151528 70%, #1a1a30 100%);
-      min-height: 100vh; color: #f0e6d0; line-height: 1.6;
+      font-family: 'Noto Sans TC', 'Baloo 2', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% -8%, #fbf3e0 0%, #f3e6cb 55%, #ecdcbd 100%);
+      background-attachment: fixed; min-height: 100vh; color: var(--brown); line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
-    .container { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
-    .header { text-align: center; padding: 26px 0 18px; }
+    .container { max-width: 520px; margin: 0 auto; padding: 20px 16px 44px; position: relative; }
+    /* 柔和黏土光點裝飾 */
+    .container::before, .container::after { content: ''; position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
+    .container::before { width: 180px; height: 180px; top: 8%; right: -44px; background: radial-gradient(circle, rgba(240,196,77,0.20), transparent 70%); }
+    .container::after  { width: 210px; height: 210px; bottom: 5%; left: -54px; background: radial-gradient(circle, rgba(224,122,100,0.14), transparent 70%); }
+
+    .header { text-align: center; padding: 16px 0 22px; position: relative; z-index: 1; }
     .header h1 {
-      font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 700; letter-spacing: 1px;
-      background: linear-gradient(180deg, #f0e6d0, #c8a45c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      font-size: 1.55rem; font-weight: 900; letter-spacing: 1px; color: #5a3e22;
+      text-shadow: 0 2px 0 #fff, 0 3px 7px rgba(150,100,50,0.25);
     }
-    .header p { color: #c8b89a; font-size: 0.85rem; margin-top: 6px; }
-    .cat { margin-bottom: 26px; }
+    .header p { color: var(--brown-soft); font-size: 0.86rem; margin-top: 8px; font-weight: 500; }
+
+    .cat { margin-bottom: 24px; position: relative; z-index: 1; }
     .cat-title {
-      display: flex; align-items: center; gap: 8px; font-family: 'Noto Serif TC', serif;
-      font-size: 1.15rem; font-weight: 700; color: #e2c67b; margin-bottom: 12px;
-      padding-bottom: 8px; border-bottom: 1px solid rgba(200,164,92,0.25);
+      display: inline-flex; align-items: center; gap: 8px; font-size: 1.05rem; font-weight: 900; color: #fff;
+      background: linear-gradient(180deg, #b27f4b, #99662f); padding: 8px 18px; border-radius: 22px;
+      margin-bottom: 14px; border: 2px solid #c08c54;
+      box-shadow: 0 4px 0 #7d5223, 0 6px 11px var(--shadow);
     }
+
+    /* 黏土磚塊卡片：厚邊 + 底部立體厚度 + 柔和暖陰影 */
     .act-card {
-      display: block; text-decoration: none; background: #1a1a30; border: 1px solid rgba(200,164,92,0.18);
-      border-radius: 14px; padding: 15px 18px; margin-bottom: 10px; transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      display: block; text-decoration: none; background: var(--card);
+      border: 3px solid var(--edge); border-radius: 22px; padding: 16px 18px; margin-bottom: 15px;
+      transition: transform 0.14s ease, box-shadow 0.14s ease;
+      box-shadow: 0 5px 0 var(--edge-dark), 0 10px 16px var(--shadow);
     }
-    .act-card:hover { border-color: var(--gold); transform: translateY(-1px); }
-    .act-card-closed { opacity: 0.6; cursor: default; }
-    .act-card-closed:hover { border-color: rgba(200,164,92,0.18); transform: none; }
+    .act-card:hover, .act-card:active { transform: translateY(2px); box-shadow: 0 3px 0 var(--edge-dark), 0 6px 12px var(--shadow); }
+    .act-card-closed { cursor: default; background: #f1e7d6; border-color: #d8c7ab; box-shadow: 0 5px 0 #cab791, 0 10px 16px var(--shadow); }
+    .act-card-closed:hover { transform: none; box-shadow: 0 5px 0 #cab791, 0 10px 16px var(--shadow); }
+
     .act-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .act-name { font-size: 1.05rem; font-weight: 700; color: #f0e6d0; }
-    .act-meta { font-size: 0.78rem; color: #c8b89a; margin-top: 4px; }
+    .act-name { font-size: 1.08rem; font-weight: 900; color: #4a3322; }
+    .act-meta { font-size: 0.78rem; color: var(--brown-soft); margin-top: 5px; font-weight: 500; }
+
+    /* 軟紅色黏土「報名」鈕 */
     .act-go {
-      flex: 0 0 auto; color: #0d0d1a; font-weight: 700; font-size: 0.85rem;
-      background: linear-gradient(135deg, var(--gold-light), var(--gold)); padding: 7px 14px; border-radius: 20px;
+      flex: 0 0 auto; color: #fff; font-weight: 900; font-size: 0.9rem; white-space: nowrap;
+      background: linear-gradient(180deg, #e8866f, #d35f49); padding: 9px 18px; border-radius: 20px;
+      border: 2px solid #ee9c89; box-shadow: 0 3px 0 #b54a36, 0 4px 8px rgba(180,80,60,0.3);
     }
-    .act-go-closed { background: rgba(200,164,92,0.15); color: #c8b89a; white-space: nowrap; }
-    .empty { color: #8a8071; font-size: 0.85rem; padding: 6px 2px; }
-    .loading { text-align: center; color: #c8b89a; font-size: 0.9rem; padding: 30px 0; }
-    .footer { text-align: center; color: rgba(200,164,92,0.35); font-size: 0.78rem; padding-top: 16px; }
+    .act-go-closed {
+      background: linear-gradient(180deg, #cdb79b, #b8a17f); color: #fff;
+      border-color: #d8c6a8; box-shadow: 0 3px 0 #9c8765, 0 4px 8px var(--shadow);
+    }
+
+    .empty {
+      color: var(--brown-soft); font-size: 0.86rem; padding: 14px 16px; font-weight: 500;
+      background: rgba(255,253,246,0.6); border: 2px dashed #d9c5a3; border-radius: 16px;
+    }
+    .loading { text-align: center; color: var(--brown-soft); font-size: 0.9rem; padding: 36px 0; font-weight: 500; }
+    .footer { text-align: center; color: rgba(120,90,55,0.5); font-size: 0.78rem; padding-top: 18px; font-weight: 500; position: relative; z-index: 1; }
   </style>
 </head>
 
