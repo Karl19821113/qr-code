@@ -115,9 +115,16 @@
           html += '<div class="empty">目前無相關活動</div>';
         } else {
           items.forEach(function (a) {
+            var countMeta = '';
+            if (a.open && a.count != null) {
+              countMeta = a.max
+                ? ('<div class="act-meta">👥 報名 ' + a.count + ' / ' + a.max + '</div>')
+                : ('<div class="act-meta">👥 已報名 ' + a.count + ' 人</div>');
+            }
             var inner = '<div class="act-row">'
               + '<div><div class="act-name">' + esc(a.name) + '</div>'
               + (a.deadline ? '<div class="act-meta">📅 報名截止：' + esc(a.deadline) + '</div>' : '')
+              + countMeta
               + '</div>'
               + (a.open ? '<span class="act-go">報名 ›</span>' : '<span class="act-go act-go-closed">🔒 尚未開放</span>')
               + '</div>';
